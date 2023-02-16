@@ -27,18 +27,20 @@ class Renderer(nn.Module):
         # camera
         self.camera_mode = camera_mode
         if self.camera_mode == 'projection':
-            self.K = K
-            self.R = R
-            self.t = t
-            if isinstance(self.K, numpy.ndarray):
-                self.K = torch.cuda.FloatTensor(self.K)
-            if isinstance(self.R, numpy.ndarray):
-                self.R = torch.cuda.FloatTensor(self.R)
-            if isinstance(self.t, numpy.ndarray):
-                self.t = torch.cuda.FloatTensor(self.t)
-            self.dist_coeffs = dist_coeffs
+            if isinstance(K, numpy.ndarray):
+                K = torch.tensor(K, dtype=torch.float32)
+            if isinstance(R, numpy.ndarray):
+                R = torch.tensor(R, dtype=torch.float32)
+            if isinstance(t, numpy.ndarray):
+                t = torch.tensor(t, dtype=torch.float32)
             if dist_coeffs is None:
-                self.dist_coeffs = torch.cuda.FloatTensor([[0., 0., 0., 0., 0.]])
+                dist_coeffs = torch.tensor([[0., 0., 0., 0., 0.]], dtype=torch.float32)
+            # Register buffers to make them persistent
+            self.register_buffer('K', K)
+            self.register_buffer('R', R)
+            self.register_buffer('t', t)
+            self.register_buffer('dist_coeffs', dist_coeffs)
+
             self.orig_size = orig_size
         elif self.camera_mode in ['look', 'look_at']:
             self.perspective = perspective
