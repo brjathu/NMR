@@ -36,7 +36,7 @@ class RasterizeFunction(Function):
 
         faces = faces.clone()
 
-        ctx.device = faces.device
+        ctx.device = device = faces.device
         ctx.batch_size, ctx.num_faces = faces.shape[:2]
 
         if ctx.return_rgb:
@@ -44,7 +44,7 @@ class RasterizeFunction(Function):
             ctx.texture_size = textures.shape[2]
         else:
             # initializing with dummy values
-            textures = torch.cuda.FloatTensor(1).fill_(0)
+            textures = torch.empty(1, device=device, dtype=torch.float32).fill_(0)
             ctx.texture_size = None
 
 
@@ -56,31 +56,31 @@ class RasterizeFunction(Function):
         buffer_size = 512
         ctx.block_size = block_size
         ctx.buffer_size = buffer_size
-        face_list = torch.cuda.IntTensor(ctx.batch_size, (ctx.image_size-1)//block_size+1, (ctx.image_size-1)//block_size+1, buffer_size).fill_(0)
-        face_index_map = torch.cuda.IntTensor(ctx.batch_size, ctx.image_size, ctx.image_size).fill_(-1)
-        weight_map = torch.cuda.FloatTensor(ctx.batch_size, ctx.image_size, ctx.image_size, 3).fill_(0.0)
-        depth_map = torch.cuda.FloatTensor(ctx.batch_size, ctx.image_size, ctx.image_size).fill_(ctx.far)
+        face_list = torch.empty(ctx.batch_size, (ctx.image_size-1)//block_size+1, (ctx.image_size-1)//block_size+1, buffer_size, device=device, dtype=torch.int).fill_(0)
+        face_index_map = torch.empty(ctx.batch_size, ctx.image_size, ctx.image_size, device=device, dtype=torch.int).fill_(-1)
+        weight_map = torch.empty(ctx.batch_size, ctx.image_size, ctx.image_size, 3, device=device, dtype=torch.float32).fill_(0.0)
+        depth_map = torch.empty(ctx.batch_size, ctx.image_size, ctx.image_size, device=device, dtype=torch.float32).fill_(ctx.far)
 
         if ctx.return_rgb:
-            rgb_map = torch.cuda.FloatTensor(ctx.batch_size, ctx.image_size, ctx.image_size, 3).fill_(0)
-            sampling_index_map = torch.cuda.IntTensor(ctx.batch_size, ctx.image_size, ctx.image_size, 8).fill_(0)
-            sampling_weight_map = torch.cuda.FloatTensor(ctx.batch_size, ctx.image_size, ctx.image_size, 8).fill_(0)
+            rgb_map = torch.empty(ctx.batch_size, ctx.image_size, ctx.image_size, 3, device=device, dtype=torch.float32).fill_(0)
+            sampling_index_map = torch.empty(ctx.batch_size, ctx.image_size, ctx.image_size, 8, device=device, dtype=torch.int).fill_(0)
+            sampling_weight_map = torch.empty(ctx.batch_size, ctx.image_size, ctx.image_size, 8, device=device, dtype=torch.float32).fill_(0)
         else:
-            rgb_map = torch.cuda.FloatTensor(1).fill_(0)
-            sampling_index_map = torch.cuda.FloatTensor(1).fill_(0)
-            sampling_weight_map = torch.cuda.FloatTensor(1).fill_(0)
+            rgb_map = torch.empty(1, device=device, dtype=torch.float32).fill_(0)
+            sampling_index_map = torch.empty(1, device=device, dtype=torch.float32).fill_(0)
+            sampling_weight_map = torch.empty(1, device=device, dtype=torch.float32).fill_(0)
         if ctx.return_alpha:
-            alpha_map = torch.cuda.FloatTensor(ctx.batch_size, ctx.image_size, ctx.image_size).fill_(0)
+            alpha_map = torch.empty(ctx.batch_size, ctx.image_size, ctx.image_size, device=device, dtype=torch.float32).fill_(0)
         else:
-            alpha_map = torch.cuda.FloatTensor(1).fill_(0)
+            alpha_map = torch.empty(1, device=device, dtype=torch.float32).fill_(0)
         if ctx.return_depth:
-            face_inv_map = torch.cuda.FloatTensor(ctx.batch_size, ctx.image_size, ctx.image_size, 3, 3).fill_(0)
+            face_inv_map = torch.empty(ctx.batch_size, ctx.image_size, ctx.image_size, 3, 3, device=device, dtype=torch.float32).fill_(0)
         else:
-            face_inv_map = torch.cuda.FloatTensor(1).fill_(0)
+            face_inv_map = torch.empty(1, device=device, dtype=torch.float32).fill_(0)
         if ctx.return_visibility:
-            face_visibility = torch.cuda.IntTensor(ctx.batch_size, ctx.num_faces).fill_(0)
+            face_visibility = torch.empty(ctx.batch_size, ctx.num_faces, device=device, dtype=torch.int).fill_(0)
         else:
-            face_visibility = torch.cuda.IntTensor(1).fill_(0)
+            face_visibility = torch.empty(1, device=device, dtype=torch.int).fill_(0)
 
         face_index_map, weight_map, depth_map, face_inv_map, face_visibility =\
             RasterizeFunction.forward_face_index_map(ctx, faces, face_index_map,
@@ -123,10 +123,11 @@ class RasterizeFunction(Function):
         # initialize output buffers
         # no need for explicit allocation of cuda.FloatTensor because zeros_like does it automatically
         grad_faces = torch.zeros_like(faces, dtype=torch.float32)
+        device = faces.device
         if ctx.return_rgb:
             grad_textures = torch.zeros_like(textures, dtype=torch.float32)
         else:
-            grad_textures = torch.cuda.FloatTensor(1).fill_(0.0)
+            grad_textures = torch.empty(1, device=device, dtype=torch.float32).fill_(0.0)
         
         # get grad_outputs
         if ctx.return_rgb:
@@ -135,21 +136,21 @@ class RasterizeFunction(Function):
             else:
                 grad_rgb_map = torch.zeros_like(rgb_map)
         else:
-            grad_rgb_map = torch.cuda.FloatTensor(1).fill_(0.0)
+            grad_rgb_map = torch.empty(1, device=device, dtype=torch.float32).fill_(0.0)
         if ctx.return_alpha:
             if grad_alpha_map is not None:
                 grad_alpha_map = grad_alpha_map.contiguous()
             else:
                 grad_alpha_map = torch.zeros_like(alpha_map)
         else:
-            grad_alpha_map = torch.cuda.FloatTensor(1).fill_(0.0)
+            grad_alpha_map = torch.empty(1, device=device, dtype=torch.float32).fill_(0.0)
         if ctx.return_depth:
             if grad_depth_map is not None:
                 grad_depth_map = grad_depth_map.contiguous()
             else:
                 grad_depth_map = torch.zeros_like(ctx.depth_map)
         else:
-            grad_depth_map = torch.cuda.FloatTensor(1).fill_(0.0)
+            grad_depth_map = torch.empty(1, device=device, dtype=torch.float32).fill_(0.0)
 
         # backward pass
         grad_faces = RasterizeFunction.backward_pixel_map(
@@ -200,7 +201,7 @@ class RasterizeFunction(Function):
     @staticmethod
     def forward_background(ctx, face_index_map, rgb_map):
         if ctx.return_rgb:
-            background_color = torch.cuda.FloatTensor(ctx.background_color)
+            background_color = torch.tensor(ctx.background_color, device=rgb_map.device)
             mask = (face_index_map >= 0).float()[:, :, :, None]
             if background_color.ndimension() == 1:
                 rgb_map = rgb_map * mask + (1-mask) * background_color[None, None, None, :]

@@ -38,7 +38,7 @@ def main():
     # to gpu
 
     # create renderer
-    renderer = nr.Renderer(camera_mode='look_at')
+    renderer = nr.Renderer(camera_mode='look_at').cuda()
 
     # draw object
     loop = tqdm.tqdm(range(0, 360, 4))
